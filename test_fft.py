@@ -15,16 +15,16 @@ if __name__ == "__main__":
 
     infile = r'E:\Kokorev\fft_data\ptotin2\pdiff1.csv'
     data = get_data(infile)
-    input_data = data['input']
-    pressure = input_data[:, 1] * unit
+    pressure = data['y']
+    pressure = pressure * unit
     pressure = pressure - pressure.mean()
     n = pressure.size
-    time = input_data[:, 0]
+    time = data['x']
     wsignal = pressure * hann(n)
     fft_data = fft(wsignal)
     density = np.array([abs(fft_data[i]) ** 2 if i == 0 else 2 * abs(fft_data[i]) ** 2 for i in range(n)])
 
-    dt = input_data[1,0] - input_data[0,0]
+    dt = time[1] - time[0]
     fs = 1 / dt
     freq = fftfreq(n, dt)
 

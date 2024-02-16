@@ -7,7 +7,8 @@ from openpyxl import load_workbook
 
 def get_data(file: str):
     
-    data = []
+    x = []
+    y = []
     ext = os.path.splitext(os.path.split(file)[1])[1]
 
     with open(file, 'r', newline='') as f:
@@ -16,8 +17,9 @@ def get_data(file: str):
             reader = csv.reader(f, delimiter=',')
             for row in reader:
                 try:
-                    x, y = float(row[0]), float(row[1])
-                    data.append((x, y))
+                    xi, yi = float(row[0]), float(row[1])
+                    x.append(xi)
+                    y.append(yi)
                 except ValueError:
                     continue
                 except AttributeError:
@@ -30,12 +32,13 @@ def get_data(file: str):
 
             for row in rows:
                 try:
-                    x = float(row[0])
-                    y = float(row[1])
-                    data.append((x, y))
+                    xi = float(row[0])
+                    yi = float(row[1])
+                    x.append(xi)
+                    y.append(yi)
                 except ValueError:
                     continue
                 except AttributeError:
                     raise AttributeError('unsupported value type')
     
-    return {'file': file, 'input': np.array(data)}
+    return np.array(x), np.array(y)

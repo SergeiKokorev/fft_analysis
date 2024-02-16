@@ -1,5 +1,4 @@
 import os
-import sys
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QGridLayout, QPushButton,
@@ -9,15 +8,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 
-DIR = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), os.pardir
-))
-
-
-from gui.editors import *
-from gui.widgets import *
+from gui.editors import SignalEditor, NameEdit
+from gui.widgets import SignalList, ButtonGroup
 from tools import get_data
-from models import SignalCash, Signal
+from models import InputSignals, Input
 
 
 INFO = '''
@@ -54,11 +48,11 @@ class View(QMainWindow):
 
         layout = QGridLayout()
 
-        self.data = SignalCash()
-        self.model = SignalModel(self.data)
+        self.data = InputSignals()
+        self.input_model = SignalList(self.data)
         self.signalView = QListView()
         self.signalView.clicked.connect(self.update_info)
-        self.signalView.setModel(self.model)
+        self.signalView.setModel(self.input_model)
 
         # Settings group
         settings_grp = QGroupBox('Settings')
@@ -111,19 +105,19 @@ class View(QMainWindow):
             name_edit.show()
             name_edit.exec()
             name = name_edit.name if name_edit.name else os.path.split(file)[1]
-            signal = Signal(name=name, **get_data(file))
-            self.model._data.add(signal)
+            x, y = get_data(file)
+            signal = Input(x, y, file=file, name=name)
+            self.input_model.add(signal)
             self.button_group.enable(self.button_group.buttons()[1:])
-            self.model.layoutChanged.emit()
+            self.input_model.layoutChanged.emit()
             self.__cdir = os.path.split(file)[0]
 
     def modify_input_signal(self):
         idx = self.signalView.currentIndex().row()
-        signal = self.data.signals[idx]
-        input_signal = InputSignal(self, model=signal)
-        input_signal.plot()
-        input_signal.show()
-        input_signal.exec()
+        input_signal: Input = self.data.signals[idx]
+        signal_editor = SignalEditor(self, input=input_signal)
+        signal_editor.show()
+        signal_editor.exec()
 
     def update_info(self, signal):
-        self.info.setText(self.data.signals[signal.row()].info())
+        self.info.setText(self.data.signals[signal.row()].info)

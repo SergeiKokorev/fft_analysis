@@ -1,6 +1,5 @@
 import os
 import sys
-import math
 import matplotlib
 
 
@@ -8,7 +7,7 @@ from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtWidgets import (
     QDialog, QGridLayout, QDialogButtonBox, QLineEdit,
     QHBoxLayout, QLabel, QGroupBox, QComboBox, QVBoxLayout,
-    QWidget, QSizePolicy, QLayout, QDoubleSpinBox, QSlider
+    QWidget, QCheckBox
 )
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
@@ -21,45 +20,14 @@ sys.path.append(DIR)
 matplotlib.use('Qt5Agg')
 
 
-from const import WINDOWS
-from gui.widgets import DoubleSlider
+from windows import WINDOWS
+from spectral import SPECTRAL_ANALYSIS as SPECTRAL, SOUND_ANALYSIS as SOUND
+from gui.widgets import *
+from models import Input, InputSignals
 
 
 SIZE = QSize(128, 24)
 
-
-
-
-
-
-class SliderEdit(DoubleSlider):
-
-    def __init__(self, decimals=3, *args, **kwargs):
-        super().__init__(decimals, *args, **kwargs)
-        self.setOrientation(Qt.Orientation.Horizontal)
-        self.setFixedSize(QSize(112, 24))
-
-    def setupSlider(self, **settings):
-        
-        if max_val := settings.get('max_val', None):
-            self.setMaximum(max_val)
-        if min_val := settings.get('min_val', None):
-            self.setMinimum(min_val)
-        if slot := settings.get('slot', None):
-            self.doubleValueChanged.connect(slot)
-        if single_step := settings.get('single_step', None):
-            self.setSingleStep(single_step)
-    
-    @classmethod
-    def getDecimals(self, step):
-        end = True
-        n = 0
-        while end:
-            if math.floor(step * 10 ** n):
-                end = False
-            else:
-                n += 1
-        return n
 
 class NameEdit(QDialog):
 
@@ -68,6 +36,7 @@ class NameEdit(QDialog):
 
         self.setWindowTitle('Signal Name')
         self.setFixedSize(QSize(312, 72))
+        self.setWindowModality(Qt.WindowModality.WindowModal)
         layout = QGridLayout()
 
         buttonBox = QDialogButtonBox(Qt.Orientation.Horizontal)
@@ -76,6 +45,7 @@ class NameEdit(QDialog):
         buttonBox.rejected.connect(self.reject)
 
         self.name = QLineEdit()
+        self.name.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         line_layout = QHBoxLayout()
         line_layout.addWidget(QLabel('Input signal name'))
         line_layout.addWidget(self.name)
@@ -104,15 +74,19 @@ class MpCanvas(FigureCanvasQTAgg):
         super(MpCanvas, self).__init__(self.fig)
 
 
-class InputSignal(QDialog):
+class SignalEditor(QDialog):
     
     def __init__(self, parent = None, f = Qt.WindowType.Dialog, **kwargs) -> None:
         super().__init__(parent, f)
-        self._model = kwargs.get('model', None)
+        self._input: Input = kwargs.get('input', None)
+        self.input = MpCanvas(self, width=5, height=4, dpi=100)
+        self.fft= MpCanvas(self, width=5, height=4, dpi=100)
 
-        self.mlayout = QGridLayout()
-        self.setWindowTitle('Input Signal Settings')
-        self.setLayout(self.mlayout)
+        layout = QGridLayout()
+        self.setLayout(layout)
+        self.setWindowTitle('Plot settings')
+        self.setMinimumSize(QSize(1024, 728))
+        self.setWindowModality(Qt.WindowModality.WindowModal)
 
         buttonBox = QDialogButtonBox(Qt.Orientation.Horizontal)    
         buttonBox.setStandardButtons(
@@ -124,105 +98,137 @@ class InputSignal(QDialog):
         buttonBox.rejected.connect(self.reject)
         buttonBox.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply)
 
-        self.output_signal = MpCanvas(self, width=5, height=4, dpi=100)
+        in_group = QGroupBox(self)
+        fft_group = QGroupBox(self)
+        in_group.setTitle('Input Signal')
+        fft_group.setTitle('FFT Signal')
+        in_group.setLayout(self.__init_signal__())
+        fft_group.setLayout(self.__fft_signal__())
 
+        layout.addWidget(in_group)
+        layout.addWidget(fft_group, 1, 0)
+        layout.addWidget(buttonBox, 2, 0)
 
-        out_layout = QHBoxLayout()
-        out_layout.addWidget(self.output_signal)
-        out_group = QGroupBox('FFT Signal')
-        out_group.setLayout(out_layout)
-
-        self.__init_input__()
-
-        self.mlayout.addWidget(out_group, 1, 0)
-        self.mlayout.addWidget(buttonBox, 2, 0)
-        self.setLayout(self.mlayout)
-
-    def __init_input__(self):
-        in_layout = QGridLayout()
-        in_group = QGroupBox('Input Signal')
+    def __init_signal__(self) -> QGridLayout:
         
-        self.input_signal = MpCanvas(self, width=5, height=4, dpi=100)
+        layout = QGridLayout()
+        settings_layout = QVBoxLayout()
 
+        items = list(WINDOWS.keys()) + ['None']
+        cmb_win = ComboBox(self, items, 'window', fixed_size=QSize(168, 28))
+        
+        xlabel = LineEdit(self, 'X label', 'xlabel', fixed_size=QSize(128, 28), placeholder='Input X label name')
+        ylabel = LineEdit(self, 'Y label', 'ylabel', fixed_size=QSize(128, 28), placeholder='Input Y abel name')
 
-
-        self.window_fun = QComboBox(self)
-        self.window_fun.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.window_fun.setFixedSize(QSize(128, 24))
-        self.window_fun.addItem('None')
-        self.window_fun.addItems(WINDOWS.keys())
-        vlayout = QVBoxLayout()
-
-        self.in_xlabel = QLineEdit(self)
-        self.in_xlabel.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.in_xlabel.setFixedSize(QSize(128, 24))
-        lbl = QLabel('X Axis')
-        vlayout.addWidget(lbl)
-        vlayout.addWidget(self.in_xlabel)
-        lbl = QLabel('Y Axis')
-
-        self.in_ylabel = QLineEdit(self)
-        self.in_ylabel.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.in_ylabel.setFixedSize(QSize(128, 24))
-        vlayout.addWidget(lbl)
-        vlayout.addWidget(self.in_ylabel)
-
-        crop_gruop = QGroupBox('Crop Signal')
-        crop_gruop.setFixedSize(QSize(128, 128))
-        crop_layout = QVBoxLayout()
-        xmin_lbl = QLabel('xmin:')
-        xmax_lbl = QLabel('xmax:')
-        tmin = self._model.input[0,0]
-        tmax = self._model.input[-1,0]
-
-        dt = self._model.dt
-        decimals = SliderEdit.getDecimals(dt)
-        self.xmin = SliderEdit(decimals=decimals)
-        self.xmax = SliderEdit(decimals=decimals)
-        self.xmin.setupSlider(
-            max_val=tmax, min_val=tmin,
-            slot=lambda: self.tickChanged(xmin_lbl, decimals, self.xmin.value()),
-            single_step=dt
+        dec = DoubleSlider.getDecimals(self._input.dt)
+        xmax = CropSignal(dec, 'Xmax', 'xmax')
+        xmin = CropSignal(dec, 'Xmin', 'xmin')
+        xmax.sliderSetup(
+            self._input._x[0], self._input._x[-1], self._input.dt,
+            size=QSize(168, 28), pos=self._input._xlimits[1]
         )
-        self.xmax.setupSlider(
-            max_val=tmax, min_val=tmin,
-            slot=lambda: self.tickChanged(xmax_lbl, decimals, self.xmax.value()),
-            single_step=dt
+        xmin.sliderSetup(
+            self._input._x[0], self._input._x[-1], self._input.dt,
+            size=QSize(168, 28), pos=self._input._xlimits[0]
         )
-        self.xmin.setSliderPosition(tmin)
-        self.xmax.setSliderPosition(tmax)
-        crop_layout.addWidget(xmin_lbl)
-        crop_layout.addWidget(self.xmin)
-        crop_layout.addWidget(xmax_lbl)
-        crop_layout.addWidget(self.xmax)
-        crop_gruop.setLayout(crop_layout)
+        subtrack_mean = CheckBox(check_state=True, obj_name='sub_mean', label='Subtrackt mean', fixed_size=QSize(196, 32))
 
-        in_layout.addWidget(self.input_signal, 0, 0, 4, 1)
-        in_layout.addWidget(self.window_fun, 0, 1)
-        in_layout.addLayout(vlayout, 1, 1)
-        in_layout.addWidget(crop_gruop, 2, 1)
+        settings_layout.addWidget(groupBuilder('Window', [cmb_win], size=QSize(196, 64)))
+        settings_layout.addWidget(groupBuilder('Labels', [xlabel.layout, ylabel.layout], size=QSize(196, 96)))
+        settings_layout.addWidget(groupBuilder('Limits', [xmin, xmax], size=QSize(196, 164)))
+        settings_layout.addWidget(subtrack_mean)
+        settings_layout.addWidget(QWidget(), 1)
 
-        in_layout.addWidget(QWidget(), 3, 1)
-        in_layout.setRowStretch(3, 1)
+        layout.addLayout(settings_layout, 0, 1)
+        layout.addWidget(self.input, 0, 0)
 
-        in_group.setLayout(in_layout)
-        self.mlayout.addWidget(in_group)
+        return layout
 
-    def plot(self):
-        x, y = self._model.input[:,0], self._model.input[:,1]
-        xlabel, ylabel = self._model.xlabel, self._model.ylabel
-        self.input_signal.axes.plot(x, y)
-        self.input_signal.axes.set_xlabel(xlabel)
-        self.input_signal.axes.set_ylabel(ylabel)
-        amp, freq = self._model.amplitude, self._model.frequency
-        self.output_signal.axes.plot(freq, amp)
-        self.output_signal.axes.set_xlabel('Frequency [Hz]')
-        self.output_signal.axes.set_ylabel(f'Amplitude fft({ylabel})')
+    def __fft_signal__(self) -> QGridLayout:
+
+        layout = QGridLayout()
+        settings_layout = QVBoxLayout()
+
+        items = SPECTRAL.keys()
+        cmb_plot = ComboBox(self, items, 'spectral', fixed_size=QSize(168, 28))
+
+        xlabel = LineEdit(self, 'X label', 'xlabel_fft',fixed_size=QSize(128, 28), placeholder='Input X label')
+        ylabel = LineEdit(self, 'Y label', 'ylabel_fft',fixed_size=QSize(128, 28), placeholder='Input Y label')
+
+        dec = DoubleSlider.getDecimals(1 / self._input.dt)
+        xmax = CropSignal(dec, 'Xmax', 'xmax_fft')
+        xmin = CropSignal(dec, 'Xmin', 'xmin_fft')
+        freq = Input.get_frequency(self._input.x.size, self._input.dt)
+        xmax.sliderSetup(
+            freq[0], freq[-1], 1 / self._input.dt,
+            size=QSize(168, 28), pos=freq[-1]
+        )
+        xmin.sliderSetup(
+            freq[0], freq[-1], 1 / self._input.dt,
+            size=QSize(168, 28), pos=freq[0]
+        )
+
+        settings_layout.addWidget(groupBuilder('Plot', [cmb_plot], size=QSize(196, 64)))
+        settings_layout.addWidget(groupBuilder('Labels', [xlabel.layout, ylabel.layout], size=QSize(196, 96)))
+        settings_layout.addWidget(groupBuilder('Limits', [xmin, xmax], size=QSize(196, 164)))
+        settings_layout.addWidget(QWidget(), 1)
+
+        layout.addLayout(settings_layout, 0, 1)
+        layout.addWidget(self.fft, 0, 0)
+
+        return layout
+
+    def plot(self, /, canvas: MpCanvas , x, y, xlabel, ylabel, name, xlimits, method=None) -> None:
+        canvas.axes.clear()
+        if method == 'bar':
+            canvas.axes.bar(x, y)
+        elif method == 'scatter':
+            canvas.axes.scatter(x, y)
+        else:
+            canvas.axes.plot(x, y)
+        canvas.axes.grid(True)
+        print(xlimits)
+        canvas.axes.set_xlim(xlimits)
+        canvas.fig.suptitle(name)
+        canvas.axes.set_xlabel(xlabel)
+        canvas.axes.set_ylabel(ylabel)
+        canvas.fig.canvas.draw()
+        canvas.flush_events()
+
+    def input_data(self) -> dict:
+        data = {}
+        data['window'] = None if not self.findChild(QComboBox, 'window') else self.findChild(QComboBox, 'window').currentText()
+        data['xlabel'] = None if not self.findChild(QLineEdit, 'xlabel') else self.findChild(QLineEdit, 'xlabel').text()
+        data['ylabel'] = None if not self.findChild(QLineEdit, 'ylabel') else self.findChild(QLineEdit, 'ylabel').text()
+        xmax = None if not self.findChild(QSlider, 'xmax') else self.findChild(QSlider, 'xmax').value()
+        xmin = None if not self.findChild(QSlider, 'xmin') else self.findChild(QSlider, 'xmin').value()
+        data['xlimits'] = (xmin, xmax)
+        data['sub_mean'] = False if not self.findChild(QCheckBox, 'sub_mean') else self.findChild(QCheckBox, 'sub_mean').isChecked()
+        return data
+
+    def output_data(self) -> dict:
+        data = {}
+        data['spectral'] = list(SPECTRAL.keys())[0] if not self.findChild(QComboBox, 'spectral') else self.findChild(QComboBox, 'spectral').currentText()
+        data['xlabel'] = 'Frequency [Hz]' if not self.findChild(QLineEdit, 'xlabel_fft') else self.findChild(QLineEdit, 'xlabel_fft').text()
+        data['ylabel'] = f'Amplitude {self._input.ylabel}' if not self.findChild(QLineEdit, 'ylabel_fft') else self.findChild(QLineEdit, 'ylabel_fft').text()
+        xmax = None if not self.findChild(QSlider, 'xmax_fft') else self.findChild(QSlider, 'xmax_fft').value()
+        xmin = None if not self.findChild(QSlider, 'xmin_fft') else self.findChild(QSlider, 'xmin_fft').value()        
+        data['xlimits'] = (xmin, xmax)
+        return data
 
     @Slot()
     def apply(self):
-        print('apply')
-    
-    def tickChanged(self, lbl: QLabel, decimals, values):
-        txt = lbl.text().split(':')[0]
-        lbl.setText(f'{txt}: {round(values, decimals + 3)}')
+        input = self.input_data()
+        self._input.update(xlabel=input['xlabel'], ylabel=input['ylabel'], xlimits=input['xlimits'])
+        x = self._input.x
+        y = self._input.y if not input['sub_mean'] else Input.subtrackt_mean(self._input.y)
+        y = y if input['window'] == 'None' else Input.window(y, input['window'])
+        self.plot(self.input, x, y, self._input.xlabel, self._input.ylabel, self._input.name, self._input.xlimits)
+
+        fft = self.output_data()
+        x = Input.get_frequency(self._input.x.size, self._input.dt)
+        if (spectral := fft['spectral']) in SPECTRAL.keys():
+            y = SPECTRAL[spectral](self._input.y)
+        elif (spectral := fft['spectral']) in SOUND.keys():
+            y = SOUND[spectral](self._input.y)
+        self.plot(self.fft, x, y, xlabel=fft['xlabel'], ylabel=fft['ylabel'], name=f'{spectral} {self._input.name}', xlimits=fft['xlimits'], method='bar')
