@@ -133,8 +133,8 @@ class SignalEditor(QDialog):
         )
         subtrack_mean = CheckBox(check_state=True, obj_name='sub_mean', label='Subtrackt mean', fixed_size=QSize(196, 32))
 
-        settings_layout.addWidget(groupBuilder('Window', [cmb_win], size=QSize(196, 64)))
-        settings_layout.addWidget(groupBuilder('Labels', [xlabel.layout, ylabel.layout], size=QSize(196, 96)))
+        settings_layout.addWidget(groupBuilder('Window', [cmb_win], size=QSize(196, 96)))
+        settings_layout.addWidget(groupBuilder('Labels', [xlabel.layout, ylabel.layout], size=QSize(196, 124)))
         settings_layout.addWidget(groupBuilder('Limits', [xmin, xmax], size=QSize(196, 164)))
         settings_layout.addWidget(subtrack_mean)
         settings_layout.addWidget(QWidget(), 1)
@@ -149,7 +149,7 @@ class SignalEditor(QDialog):
         layout = QGridLayout()
         settings_layout = QVBoxLayout()
 
-        items = SPECTRAL.keys()
+        items = list(SPECTRAL.keys()) + list(SOUND.keys())
         cmb_plot = ComboBox(self, items, 'spectral', fixed_size=QSize(168, 28))
 
         xlabel = LineEdit(self, 'X label', 'xlabel_fft',fixed_size=QSize(128, 28), placeholder='Input X label')
@@ -168,8 +168,8 @@ class SignalEditor(QDialog):
             size=QSize(168, 28), pos=freq[0]
         )
 
-        settings_layout.addWidget(groupBuilder('Plot', [cmb_plot], size=QSize(196, 64)))
-        settings_layout.addWidget(groupBuilder('Labels', [xlabel.layout, ylabel.layout], size=QSize(196, 96)))
+        settings_layout.addWidget(groupBuilder('Plot', [cmb_plot], size=QSize(196, 96)))
+        settings_layout.addWidget(groupBuilder('Labels', [xlabel.layout, ylabel.layout], size=QSize(196, 124)))
         settings_layout.addWidget(groupBuilder('Limits', [xmin, xmax], size=QSize(196, 164)))
         settings_layout.addWidget(QWidget(), 1)
 
@@ -180,14 +180,13 @@ class SignalEditor(QDialog):
 
     def plot(self, /, canvas: MpCanvas , x, y, xlabel, ylabel, name, xlimits, method=None) -> None:
         canvas.axes.clear()
-        if method == 'bar':
-            canvas.axes.bar(x, y)
+        if method == 'stem':
+            canvas.axes.stem(x, y)
         elif method == 'scatter':
             canvas.axes.scatter(x, y)
         else:
             canvas.axes.plot(x, y)
         canvas.axes.grid(True)
-        print(xlimits)
         canvas.axes.set_xlim(xlimits)
         canvas.fig.suptitle(name)
         canvas.axes.set_xlabel(xlabel)
@@ -228,7 +227,7 @@ class SignalEditor(QDialog):
         fft = self.output_data()
         x = Input.get_frequency(self._input.x.size, self._input.dt)
         if (spectral := fft['spectral']) in SPECTRAL.keys():
-            y = SPECTRAL[spectral](self._input.y)
+            y = SPECTRAL[spectral](y)
         elif (spectral := fft['spectral']) in SOUND.keys():
-            y = SOUND[spectral](self._input.y)
-        self.plot(self.fft, x, y, xlabel=fft['xlabel'], ylabel=fft['ylabel'], name=f'{spectral} {self._input.name}', xlimits=fft['xlimits'], method='bar')
+            y = SOUND[spectral](y)
+        self.plot(self.fft, x, y, xlabel=fft['xlabel'], ylabel=fft['ylabel'], name=f'{spectral} {self._input.name}', xlimits=fft['xlimits'])

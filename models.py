@@ -151,7 +151,7 @@ class Input(Signal):
     def info(self) -> str:
         return f'Input Signal Name: {self.name}\n\tInput file: {self.file}\n' \
         f'\t{self._xlabel}: step = {self.dt} Interval: {self.x[0]} ... {self.x[-1]}\n' \
-        f'Interval boundaries: xmin = {self._xlimits[0]}, xmax = {self._xlimits[1]}\n'
+        f'\tInterval boundaries: xmin = {self._xlimits[0]}, xmax = {self._xlimits[1]}\n'
 
     def crop(self, xmin, xmax):
         imin, imax = np.where(xmin >= self._x)[0][-1], np.where(xmax <= self._x)[0][0]
@@ -178,7 +178,7 @@ class Input(Signal):
         return 10 * np.log((density ** 2) / (pref ** 2))
 
     @classmethod
-    def get_sound_amplitude(cls, signal, pref: float):
+    def get_sound_amplitude(cls, signal, pref: float = 2e-5):
         density = cls.get_spectral_density(signal)
         return 10 * np.log(((density ** 2) / (pref ** 2)) ** 0.5)
 

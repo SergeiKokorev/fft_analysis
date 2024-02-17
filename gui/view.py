@@ -101,7 +101,7 @@ class View(QMainWindow):
         )[0]
         
         if file:
-            name_edit = NameEdit()
+            name_edit = NameEdit(self)
             name_edit.show()
             name_edit.exec()
             name = name_edit.name if name_edit.name else os.path.split(file)[1]
