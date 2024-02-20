@@ -7,29 +7,31 @@ from typing import Sequence, Tuple
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-from windows import WINDOWS as window
+from windows import WINDOWS as windows
 
 
 class Signal(metaclass=ABCMeta):
     
-    def __init__(self, x, y, *, file, xlabel, ylabel, name, xlimits) -> None:
+    def __init__(self, x, y, *, file, xlabel, ylabel, name, xlim, window=None, sub_mean=False) -> None:
         self._x: Sequence = np.array(x)
         self._y: Sequence = np.array(y)
         self._xlabel: str = xlabel
         self._ylabel: str = ylabel
         self._name: str = name
-        self._xlimits: Tuple = xlimits
+        self._xlim: Tuple = xlim
         self._file: str = file
+        self._window: str = window
+        self._sub_mean: bool = False
 
     def __min__(self):
         try:
-            return np.where(self._xlimits[0] >= self._x)[0][-1]
+            return np.where(self._xlim[0] >= self._x)[0][-1]
         except IndexError:
             return 0
         
     def __max__(self):
         try:
-            return np.where(self._xlimits[1] <= self._x)[0][0]
+            return np.where(self._xlim[1] <= self._x)[0][0]
         except IndexError:
             return self._x.size - 1
 
@@ -56,12 +58,20 @@ class Signal(metaclass=ABCMeta):
         return self._name
     
     @property
-    def xlimits(self):
-        return self._xlimits
+    def xlim(self):
+        return self._xlim
 
     @property
     def file(self):
         return self._file
+
+    @property
+    def window(self):
+        return self._window
+
+    @property
+    def sub_mean(self) -> bool:
+        return self._sub_mean
 
     @abstractproperty
     def info(self) -> str:
@@ -82,13 +92,19 @@ class Signal(metaclass=ABCMeta):
         if not isinstance(name, str): raise TypeError('Unsupported type for name')
         self._xlabel = name
 
-    @xlimits.setter
-    def xlimits(self, limits: Tuple):
+    @xlim.setter
+    def xlim(self, limits: Tuple):
         if not hasattr(limits, '__iter__'):
             raise TypeError('X limits must be tuple or list type')
         if not all([isinstance(i, float | complex | int) for i in limits]):
             raise ValueError('X Limits must be float, int or complex type')
-        self._xlimits = limits
+        self._xlim = limits
+
+    @sub_mean.setter
+    def sub_mean(self, subtrackt: bool):
+        if not isinstance(subtrackt, bool):
+            raise TypeError('Unsupported type for subtrackt mean. Supported type \'bool\'')
+        self._sub_mean = subtrackt
 
     @abstractmethod
     def crop(self, xmin, xmax) -> Sequence:
@@ -134,10 +150,10 @@ class SignalCash(metaclass=ABCMeta):
 
 class Input(Signal):
     
-    def __init__(self, x, y, *, file, xlabel='X', ylabel='Y', name='Plot', xlimits=None) -> None:
-        super().__init__(x, y, file=file, xlabel=xlabel, ylabel=ylabel, name=name, xlimits=xlimits)
-        if not self.xlimits:
-            self._xlimits = (self._x[0], self._x[-1])
+    def __init__(self, x, y, *, file, xlabel='X', ylabel='Y', name='Plot', xlim=None, window=None) -> None:
+        super().__init__(x, y, file=file, xlabel=xlabel, ylabel=ylabel, name=name, xlim=xlim, window=window)
+        if not self.xlim:
+            self._xlim = (self._x[0], self._x[-1])
 
     @property
     def dt(self):
@@ -151,17 +167,18 @@ class Input(Signal):
     def info(self) -> str:
         return f'Input Signal Name: {self.name}\n\tInput file: {self.file}\n' \
         f'\t{self._xlabel}: step = {self.dt} Interval: {self.x[0]} ... {self.x[-1]}\n' \
-        f'\tInterval boundaries: xmin = {self._xlimits[0]}, xmax = {self._xlimits[1]}\n'
+        f'\tInterval boundaries: xmin = {self._xlim[0]}, xmax = {self._xlim[1]}\n' \
+        f'\twindow function {self._window}'
 
     def crop(self, xmin, xmax):
         imin, imax = np.where(xmin >= self._x)[0][-1], np.where(xmax <= self._x)[0][0]
-        self.xlimits = (self._x[imin], self._x[imax])
+        self.xlim = (self._x[imin], self._x[imax])
         return (imin, imax)
 
     @classmethod
     def get_frequency(cls, n, dt):
         fs = 1 / dt
-        return np.array([j * fs / n for j in range(n)])
+        return np.array([j * fs / n for j in range(int(n / 2))])
     
     @classmethod
     def get_spectral_density(cls, signal):
@@ -187,95 +204,36 @@ class Input(Signal):
         return fft(signal)
 
     @classmethod
-    def window(cls, signal, w: str) -> Sequence:
+    def window_signal(cls, signal, w: str) -> Sequence:
         n = signal.size
-        return signal * window[w](n)
+        return signal * windows[w](n)
 
     @classmethod
     def subtrackt_mean(cls, signal):
         return signal - signal.mean()
 
-    def update(self, *, xlabel=None, ylabel=None, xlimits=None) -> None:
+    def update(self, *, xlabel=None, ylabel=None, xlim=None, window=None, sub_mean=None) -> None:
         if xlabel:
             self._xlabel = xlabel
         if ylabel:
             self._ylabel = ylabel
-        if xlimits:
-            self._xlimits = xlimits
+        if xlim:
+            self._xlim = xlim
+        if window and window in windows.keys():
+            self._window = window
+        else:
+            self._window = None
+        if sub_mean:
+            self.sub_mean = sub_mean
         
     def reset(self):
         self.xlabel = 'X'
         self.ylabel = 'Y'
         self._name = 'Plot'
-        self.xlimits = (self._x[0], self._x[-1])
+        self.xlim = (self._x[0], self._x[-1])
         
     def __str__(self):
         return self._name
-
-
-# class Output(Signal):
-
-#     def __init__(self, x, y, input, file=None, xlabel='Frequency [Hz]', ylabel='Amplitude', name='FTT', xlimits=None,) -> None:
-#         super(Output, self).__init__(x, y, file=file, xlabel=xlabel, ylabel=ylabel, name=name, xlimits=xlimits)
-#         self._input: Input = input
-#         self._y = fft(self._input.x)
-#         self._x = fftfreq(self._input.x.size, self._input.x[1] - self._input.x[0])
-#         print(self._x)
-#         n = self._x.size
-#         self._x = self._x[int(n / 2):]
-#         print(self._x)
-#         self._y = self._y[int(n / n):]
-#         if not self.xlimits:
-#             self._xlimits = (self._x[0], self._x[-1])
-
-#     @property
-#     def info(self):
-#         return f'Output Signal Name: {self.name}\n' \
-#             f'\t{self._xlabel}: beam = {self.beam} Interval: {self.x[0]} ... {self.x[-1]}\n' \
-#             f'Interval boundaries: xmin = {self._xlimits[0]}, xmax = {self._xlimits[1]}\n'
-
-#     @property
-#     def frequency(self):
-#         return self._y
-    
-#     @property
-#     def beam(self):
-#         return self._x[1] - self._x[0]
-
-#     @property
-#     def amplitude(self):
-#         return abs(self._y)
-
-#     @property
-#     def density(self):
-#         return np.array([a ** 2 if i == 0 else 2 * a ** 2 for i, a in enumerate(abs(self._y))])
-    
-#     def crop(self, fmin, fmax) -> Tuple:
-#         imin, imax = np.where(fmin >= self._x), np.where(fmax <= self._x)
-#         self.xlimits = (self._x[imin], self._x[imax])
-#         return (imin, imax)
-    
-#     def reset(self) -> None:
-#         self.xlabel = 'Frequency [Hz]'
-#         self.ylabel = f'Amplitude {self._input.ylabel}'
-#         self._name = f'FFT {self._input.name}'
-#         self.xlimits = (self._x[0], self._x[-1])
-
-#     def update(self, *, x=None, xlabel=None, ylabel=None, name=None, xlimits=None):
-#         if x:
-#             self._x = fft(x)
-#             self._y = fftfreq(self.x.size, self.x[1] - self.x[0])
-#         if xlabel:
-#             self.xlabel = xlabel
-#         if ylabel:
-#             self.ylabel = ylabel
-#         if name:
-#             self.name = name
-#         if xlimits:
-#             self.xlimits = xlimits
-
-#     def __str__(self):
-#         return self._name
 
 
 class InputSignals(SignalCash):
@@ -309,46 +267,11 @@ class InputSignals(SignalCash):
         except IndexError:
             return False
         
+    def reset(self):
+        self.__cash.clear()
+
     def get(self, idx: int) -> Input:
         try:
             return self.__cash[idx]
         except IndexError:
             return False
-
-
-# class OutputSignals(SignalCash):
-
-#     def __init__(self) -> None:
-#         super(OutputSignals, self).__init__()
-#         self.__cash = []
-
-#     @property
-#     def signals(self):
-#         return self.__cash
-    
-#     def add(self, signal: Output) -> bool:
-#         if not isinstance(signal, Output): return False
-#         self.__cash.append(signal)
-#         return True
-
-#     def delete(self, idx: int) -> bool:
-#         if not isinstance(idx, int): return False
-#         try:
-#             self.__cash.pop(idx)
-#             return True
-#         except IndexError:
-#             return False
-        
-#     def insert(self, idx: int, signal: Output) -> bool:
-#         if not isinstance(idx, int): return False
-#         if not isinstance(signal, Output): return False
-#         try:
-#             self.__cash.insert(idx, signal)
-#         except IndexError:
-#             return False
-        
-#     def get(self, idx: int) -> Tuple[Output, int]:
-#         try:
-#             return self.__cash[idx]
-#         except IndexError:
-#             return False

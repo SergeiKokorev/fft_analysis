@@ -1,9 +1,11 @@
 import os
+import shutil
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QGridLayout, QPushButton,
     QVBoxLayout,QLabel, QGroupBox, QHBoxLayout, 
-    QFileDialog, QListView
+    QFileDialog, QListView, QDialogButtonBox,
+    QMessageBox
 )
 from PySide6.QtCore import Qt
 
@@ -14,36 +16,20 @@ from tools import get_data
 from models import InputSignals, Input
 
 
-INFO = '''
-
-What is Lorem Ipsum?
-
-Lorem Ipsum is simply dummy text of the printing and typesetting 
-industry. Lorem Ipsum has been the industry's standard dummy 
-text ever since the 1500s, when an unknown printer took a galley 
-of type and scrambled it to make a type specimen book. It has 
-survived not only five centuries, but also the leap into electronic 
-typesetting, remaining essentially unchanged. It was popularised in 
-the 1960s with the release of Letraset sheets containing Lorem 
-Ipsum passages, and more recently with desktop publishing 
-software like Aldus PageMaker including versions of Lorem Ipsum.
-
-'''
-
-
 class View(QMainWindow):
 
     def __init__(self, parent=None, flag=Qt.WindowType.Window):
         super().__init__(parent, flag)
         self.setWindowTitle('Fourier Transform')
+        self.__signals = []
 
         self.__cdir = os.sep
 
         buttons = [
             {'text': 'Add Files', 'name': 'add_file', 'enable': True},
-            {'text': 'Modify Input Signal', 'name': 'input_signal', 'enable': False},
-            {'text': 'Modify Output Signal', 'name': 'output_signal', 'enable': False},
-            {'text': 'Graph', 'name': 'graph', 'enable': False}
+            {'text': 'FFT Analisys', 'name': 'fft_analysis', 'enable': False},
+            {'text': 'Regression Analysis', 'name': 'ergression_analysis', 'enable': False},
+            {'text': 'Reset files', 'name': 'reset', 'enable': True}
         ]
 
         layout = QGridLayout()
@@ -72,26 +58,41 @@ class View(QMainWindow):
         settings_grp.setLayout(settings_layout)
 
         # Info group
-        self.info = QLabel(INFO)
+        self.info = QLabel()
         info_grp = QGroupBox('Info')
         info_layout = QHBoxLayout()
         info_layout.addWidget(self.info)
         info_grp.setLayout(info_layout)
 
+        # Standart button
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save 
+                                   | QDialogButtonBox.StandardButton.Close)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+
         layout.addWidget(settings_grp, 0, 0)
         layout.addWidget(info_grp, 1, 0)
+        layout.addWidget(btn_box, 2, 0)
 
         w = QWidget()
         w.setLayout(layout)
         self.setCentralWidget(w)
+
+    @property
+    def signals(self):
+        return self.__signals
 
     def click_btn(self, btn: QPushButton):
         
         match btn.objectName():
             case 'add_file':
                 self.add_file()
-            case 'input_signal':
-                self.modify_input_signal()
+            case 'fft_analysis':
+                self.fft_analysis()
+            case 'regression_analysis':
+                self.regression_analysis()
+            case 'reset':
+                self.reset()
 
     def add_file(self):
 
@@ -108,16 +109,49 @@ class View(QMainWindow):
             x, y = get_data(file)
             signal = Input(x, y, file=file, name=name)
             self.input_model.add(signal)
-            self.button_group.enable(self.button_group.buttons()[1:])
+            self.button_group.enable([self.button_group.buttons()[1]])
             self.input_model.layoutChanged.emit()
             self.__cdir = os.path.split(file)[0]
 
-    def modify_input_signal(self):
+    def fft_analysis(self):
         idx = self.signalView.currentIndex().row()
         input_signal: Input = self.data.signals[idx]
         signal_editor = SignalEditor(self, input=input_signal)
         signal_editor.show()
         signal_editor.exec()
 
+        if signal_editor.input_signal:
+            self.__signals.append((input_signal, signal_editor.input_signal, signal_editor.fft_signal))
+
+    def regression_analysis(self):
+        pass
+
+    def reset(self):
+        self.data.reset()
+        self.button_group.disable([self.button_group.buttons()[1]])
+
     def update_info(self, signal):
         self.info.setText(self.data.signals[signal.row()].info)
+
+    def accept(self):
+        save_to = QFileDialog.getExistingDirectory(
+            self, 'Save Results', self.__cdir,
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks
+        )
+        save_from = os.path.abspath('.tmp')
+        msg = QMessageBox()
+        try:
+            for f in os.listdir('.tmp'):
+                copy_from = os.path.join(save_from, f)
+                copy_to = os.path.join(save_to, f)
+                shutil.move(copy_from, copy_to)
+            msg.information(self, 'Saving results', 
+                                          'Results have been successfully saved', 
+                                          QMessageBox.StandardButton.Ok)
+        except shutil.Error as er:
+            msg.critical(self, 'Saving resuts',
+                         f'Results have not been saved. The error occurred {er}',
+                         QMessageBox.StandardButton.Ok)
+
+    def reject(self):
+        return super().close()

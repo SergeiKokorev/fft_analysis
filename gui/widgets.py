@@ -6,7 +6,7 @@ from typing import Any, Sequence
 
 from PySide6.QtCore import (
     QObject, Qt, QAbstractListModel, Signal, QSize,
-    Slot
+    Slot, QRegularExpression
 )
 from PySide6.QtWidgets import (
     QPushButton, QButtonGroup, QLayout,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QComboBox, QLineEdit, QWidget,
     QCheckBox
 )
+from PySide6.QtGui import QRegularExpressionValidator
 
 
 def groupBuilder(title, widgets, orientation='vertical', size=QSize(128, 64)) -> QGroupBox:
@@ -24,6 +25,7 @@ def groupBuilder(title, widgets, orientation='vertical', size=QSize(128, 64)) ->
             layout.addWidget(w)
         elif isinstance(w, QLayout):
             layout.addLayout(w)
+        layout.addSpacing(10)
     group = QGroupBox(title=title)
     group.setLayout(layout)
     group.setFixedSize(size)
@@ -48,10 +50,14 @@ class CheckBox(QCheckBox):
 
 class LineEdit:
     
-    def __init__(self, parent=None, label="Edit line", obj_name='LineEdit', **settings) -> None:
+    def __init__(self, parent=None, label="Edit line", obj_name='LineEdit', orientation='horizontal', **settings) -> None:
         super().__init__()
-        self.layout = QHBoxLayout()
-        self.layout.addWidget(QLabel(label))
+        
+        if orientation == 'vertical':
+            self.layout = QVBoxLayout()
+        elif orientation == 'horizontal':
+            self.layout = QHBoxLayout()
+
         self.editor = QLineEdit()
         self.editor.setParent(parent)
         if size:=settings.get('fixed_size', None):
@@ -60,11 +66,21 @@ class LineEdit:
             self.editor.setBaseSize(size)
         if placeholder:=settings.get('placeholder', None):
             self.editor.setPlaceholderText(placeholder)
+        if regexp:=settings.get('regexp', None):
+            validator = QRegularExpressionValidator(self.editor)
+            validator.setRegularExpression(QRegularExpression(regexp))
+            self.editor.setValidator(validator)
+        
         self.editor.setObjectName(obj_name)
+        self.layout.addWidget(QLabel(label))
+        self.layout.addSpacing(10)
         self.layout.addWidget(self.editor)
 
     def text(self):
         return self.editor.text()
+
+    def setText(self, text):
+        self.editor.setText(str(text))
 
 
 class ComboBox(QComboBox):
@@ -88,6 +104,11 @@ class DoubleSlider(QSlider):
         self._multi = 10 ** decimals
 
         self.valueChanged.connect(self.emitDoubleValueChanged)
+
+    def set_decimal(self, decimals):
+        if not isinstance(decimals, int):
+            raise TypeError('Decimals must be integer type')
+        self._multi = 10 ** decimals
 
     def emitDoubleValueChanged(self):
         value = float(super(DoubleSlider, self).value()) / self._multi
@@ -117,7 +138,7 @@ class DoubleSlider(QSlider):
     @classmethod
     def getDecimals(cls, step):
         end = True
-        n = 0
+        n = 1
         while end:
             if math.floor(step * 10 ** n):
                 end = False
