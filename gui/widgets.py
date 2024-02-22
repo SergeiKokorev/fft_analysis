@@ -6,15 +6,17 @@ from typing import Any, Sequence
 
 from PySide6.QtCore import (
     QObject, Qt, QAbstractListModel, Signal, QSize,
-    Slot, QRegularExpression
+    QRegularExpression, Signal
 )
 from PySide6.QtWidgets import (
     QPushButton, QButtonGroup, QLayout,
     QSlider, QGroupBox, QLabel, QVBoxLayout,
     QHBoxLayout, QComboBox, QLineEdit, QWidget,
-    QCheckBox
+    QCheckBox, QMenu
 )
-from PySide6.QtGui import QRegularExpressionValidator
+from PySide6.QtGui import (
+    QRegularExpressionValidator, 
+)
 
 
 def groupBuilder(title, widgets, orientation='vertical', size=QSize(128, 64)) -> QGroupBox:
@@ -147,38 +149,6 @@ class DoubleSlider(QSlider):
         return n
 
 
-class CropSignal(QVBoxLayout):
-
-    def __init__(self, decimals=3, label: str='', obj_name='Slider'):
-        super().__init__()
-        self.label = QLabel(label)
-        self.slider = DoubleSlider(decimals=decimals)
-        self.slider.setObjectName(obj_name)
-        self.slider.doubleValueChanged.connect(self.sliderChanged)
-        self.addWidget(self.label)
-        self.addWidget(self.slider)
-
-    def sliderSetup(
-            self, xmin: float, xmax: float, step: float, *,
-            size: QSize = QSize(124, 28), 
-            orientation: Qt.Orientation = Qt.Orientation.Horizontal,
-            pos: float=None
-        ) -> None:
-
-        self.slider.setMinimum(xmin)
-        self.slider.setMaximum(xmax)
-        self.slider.setSingleStep(step)
-        pos = pos if pos else xmin
-        self.slider.setSliderPosition(pos)
-        self.slider.setFixedSize(size)
-        self.slider.setOrientation(orientation)
-
-    @Slot(float)
-    def sliderChanged(self, value) -> None:
-        text = self.label.text().split(':')
-        self.label.setText(f'{text[0]}:{value}')
-
-
 class PushButton(QPushButton):
 
     def setButton(self, **settings) -> None:
@@ -213,13 +183,17 @@ class ButtonGroup(QButtonGroup):
     def disable(self, buttons: Sequence[PushButton]):
         for btn in buttons:
             btn.setEnabled(False)
-    
+
 
 class SignalList(QAbstractListModel):
 
     def __init__(self, data) -> None:
         super().__init__()
         self._data = data
+        self._contextMenu = QMenu()
+        self._contextMenu.addAction('Add')
+        self._contextMenu.addAction('Delete')
+        self._contextMenu.triggered.connect(self.contextMenuEvent)
 
     def data(self, index, role) -> Any:
         if role == Qt.ItemDataRole.DisplayRole:
@@ -238,3 +212,6 @@ class SignalList(QAbstractListModel):
     
     def rowCount(self, index) -> int:
         return len(self._data.signals)
+
+    def contextMenuEvent(self, event):
+        self._contextMenu.exec(event.globalPos())

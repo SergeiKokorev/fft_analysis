@@ -7,7 +7,7 @@ from typing import Sequence, Tuple
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-from windows import WINDOWS as windows
+from const import WINDOWS as windows
 
 
 class Signal(metaclass=ABCMeta):
@@ -229,7 +229,7 @@ class Input(Signal):
     def reset(self):
         self.xlabel = 'X'
         self.ylabel = 'Y'
-        self._name = 'Plot'
+        self._name = self._name
         self.xlim = (self._x[0], self._x[-1])
         
     def __str__(self):

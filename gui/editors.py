@@ -1,7 +1,6 @@
 import os
 import sys
 import matplotlib
-import numpy as np
 
 
 from PySide6.QtCore import Qt, QSize, Slot
@@ -23,14 +22,10 @@ sys.path.append(DIR)
 matplotlib.use('Qt5Agg')
 
 
-from windows import WINDOWS
-from analysis import SPECTRAL_ANALYSIS as SPECTRAL, SOUND_ANALYSIS as SOUND
+from const import WINDOWS, SPECTRAL_ANALYSIS as SPECTRAL, SOUND_ANALYSIS as SOUND, TMP
 from gui.widgets import *
-from models import Input, InputSignals
+from models.data import Input
 
-
-SIZE = QSize(128, 24)
-TMP = '.tmp'
 
 
 class NameEdit(QDialog):
@@ -81,10 +76,10 @@ class MpCanvas(FigureCanvasQTAgg):
              xlim=None, ylim=None, 
              xlabel=None, ylabel=None, 
              xtick=None, ytick=None,
-             title=None):
+             title=None, linewidth=1.0):
         
         self.ax.clear()
-        self.ax.plot(x, y)
+        self.ax.plot(x, y, linewidth=linewidth)
         self.ax.grid(True)
         self.ax.set_title(title if title else 'Graph')
         if xlim:
@@ -100,7 +95,7 @@ class MpCanvas(FigureCanvasQTAgg):
         self.fig.canvas.draw()
         self.flush_events()
 
-    def save_fig(self, fname, dpi=300):
+    def save_fig(self, fname, dpi=600):
         self.fig.savefig(fname, dpi=dpi)
 
 
@@ -131,14 +126,14 @@ class InputLayout(QFormLayout):
         self._xmin = DoubleSlider(decimals=DoubleSlider.getDecimals(self.__model.dt))
         self._xmax.setObjectName('xmax')
         self._xmin.setObjectName('xmin')
-        self._xmax.setMaximum(self.__model._xlim[1])
-        self._xmax.setMinimum(self.__model._xlim[0])
-        self._xmin.setMaximum(self.__model._xlim[1])
-        self._xmin.setMinimum(self.__model._xlim[0])
+        self._xmax.setMaximum(self.__model._x[-1])
+        self._xmax.setMinimum(self.__model._x[0])
+        self._xmin.setMaximum(self.__model._x[-1])
+        self._xmin.setMinimum(self.__model._x[0])
         self._xmax.setSingleStep(self.__model.dt)
         self._xmin.setSingleStep(self.__model.dt)
-        self._xmax.setSliderPosition(self.__model._xlim[1])
-        self._xmin.setSliderPosition(self.__model._xlim[0])
+        self._xmax.setSliderPosition(self.__model._x[-1])
+        self._xmin.setSliderPosition(self.__model._x[0])
         self._xmin.setOrientation(Qt.Orientation.Horizontal)
         self._xmax.setOrientation(Qt.Orientation.Horizontal)
         self._xmin.setFixedSize(size)
@@ -154,8 +149,8 @@ class InputLayout(QFormLayout):
         self._xminlb = QLabel(f'Xmin: {self._xmin.value()}')
         self._xmax.doubleValueChanged.connect(self.sliderValueChanged)
         self._xmin.doubleValueChanged.connect(self.sliderValueChanged)
-        self.addRow(self._xmaxlb, self._xmax)
         self.addRow(self._xminlb, self._xmin)
+        self.addRow(self._xmaxlb, self._xmax)
         self.addRow('Subtrackt mean', self._sub_mean)
 
     def sliderValueChanged(self, value):
@@ -238,8 +233,8 @@ class FFTLayout(QFormLayout):
         self.addRow('Y label', self._ylabel)
         self._xmaxlb = QLabel(f'Xmax: {self._xmax.value()}')
         self._xminlb = QLabel(f'Xmax: {self._xmin.value()}')
-        self.addRow(self._xmaxlb, self._xmax)
         self.addRow(self._xminlb, self._xmin)
+        self.addRow(self._xmaxlb, self._xmax)
         self.addRow('Reference Pressure', self._ref_pressure)
 
     @Slot(float)
@@ -352,7 +347,9 @@ class SignalEditor(QDialog):
     @Slot()
     def accept(self):
 
-        fname = os.path.splitext(os.path.split(self._input.file)[1])[0]
+        # fname = os.path.splitext(os.path.split(self._input.file)[1])[0]
+        self.apply()
+        fname = self._input.name
         self.input.save_fig(os.path.abspath(os.path.join(TMP, f'{fname}.png')))
         x, y = self.__in_signal.values()
         self.save_csv(x, y, os.path.abspath(os.path.join(TMP, f'{fname}.csv')),

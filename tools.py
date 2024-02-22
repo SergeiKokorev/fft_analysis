@@ -23,7 +23,9 @@ def get_data(file: str):
                 except ValueError:
                     continue
                 except AttributeError:
-                    raise AttributeError('Unsupported value type')
+                    return AttributeError('Unsupported value type')
+                except IndexError:
+                    return IndexError('Unsupported value type')
 
         elif ext in ['.xlsx', '.xls']:
             wb = load_workbook(filename=file)
@@ -39,6 +41,8 @@ def get_data(file: str):
                 except ValueError:
                     continue
                 except AttributeError:
-                    raise AttributeError('unsupported value type')
+                    return AttributeError('Unsupported value type')
+                except IndexError:
+                    return IndexError('Unsupported data type')
     
     return np.array(x), np.array(y)

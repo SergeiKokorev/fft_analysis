@@ -13,7 +13,8 @@ from PySide6.QtCore import Qt
 from gui.editors import SignalEditor, NameEdit
 from gui.widgets import SignalList, ButtonGroup
 from tools import get_data
-from models import InputSignals, Input
+from models.data import InputSignals, Input
+from const import TMP
 
 
 class View(QMainWindow):
@@ -26,19 +27,20 @@ class View(QMainWindow):
         self.__cdir = os.sep
 
         buttons = [
-            {'text': 'Add Files', 'name': 'add_file', 'enable': True},
+            {'text': 'Add File', 'name': 'add_file', 'enable': True},
             {'text': 'FFT Analisys', 'name': 'fft_analysis', 'enable': False},
             {'text': 'Regression Analysis', 'name': 'ergression_analysis', 'enable': False},
-            {'text': 'Reset files', 'name': 'reset', 'enable': True}
+            {'text': 'Delete file', 'name': 'delete', 'enable': False},
+            {'text': 'Delete all files', 'name': 'reset', 'enable': False}
         ]
 
         layout = QGridLayout()
 
         self.data = InputSignals()
-        self.input_model = SignalList(self.data)
+        self.data_model = SignalList(self.data)
         self.signalView = QListView()
         self.signalView.clicked.connect(self.update_info)
-        self.signalView.setModel(self.input_model)
+        self.signalView.setModel(self.data_model)
 
         # Settings group
         settings_grp = QGroupBox('Settings')
@@ -93,6 +95,8 @@ class View(QMainWindow):
                 self.regression_analysis()
             case 'reset':
                 self.reset()
+            case 'delete':
+                self.delete()
 
     def add_file(self):
 
@@ -106,12 +110,22 @@ class View(QMainWindow):
             name_edit.show()
             name_edit.exec()
             name = name_edit.name if name_edit.name else os.path.split(file)[1]
-            x, y = get_data(file)
-            signal = Input(x, y, file=file, name=name)
-            self.input_model.add(signal)
-            self.button_group.enable([self.button_group.buttons()[1]])
-            self.input_model.layoutChanged.emit()
-            self.__cdir = os.path.split(file)[0]
+            try:
+                x, y = get_data(file)
+                signal = Input(x, y, file=file, name=name)
+                self.data_model.add(signal)
+                self.button_group.enable(self.button_group.buttons()[1:])
+                self.data_model.layoutChanged.emit()
+                self.__cdir = os.path.split(file)[0]
+            except (AttributeError, IndexError, TypeError) as er:
+                error = QMessageBox()
+                msg = f'During importing data from the file an error ocurred.\n' \
+                      f'The data file must contain numerical data in (x,y) format ' \
+                      f'and must not contain empty lines.\n' \
+                      f'Please try another data file.\n' \
+                      f'Error: {str(er)}'
+                error.critical(self, 'Data import error', msg,
+                               QMessageBox.StandardButton.Ok)
 
     def fft_analysis(self):
         idx = self.signalView.currentIndex().row()
@@ -128,7 +142,15 @@ class View(QMainWindow):
 
     def reset(self):
         self.data.reset()
-        self.button_group.disable([self.button_group.buttons()[1]])
+        for file in os.listdir(TMP):
+            os.remove(os.path.abspath(os.path.join(TMP, file)))
+        self.button_group.disable(self.button_group.buttons()[1:])
+
+    def delete(self):
+        index = self.signalView.currentIndex()
+        self.data.delete(index.row())
+        if len(self.data.signals) == 0:
+            self.button_group.disable(self.button_group.buttons()[1:])
 
     def update_info(self, signal):
         self.info.setText(self.data.signals[signal.row()].info)
@@ -138,10 +160,16 @@ class View(QMainWindow):
             self, 'Save Results', self.__cdir,
             QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks
         )
-        save_from = os.path.abspath('.tmp')
+
+        if not save_to:            
+            return None
+        
+        save_from = os.path.abspath(TMP)
         msg = QMessageBox()
+
         try:
-            for f in os.listdir('.tmp'):
+
+            for f in os.listdir(TMP):
                 copy_from = os.path.join(save_from, f)
                 copy_to = os.path.join(save_to, f)
                 shutil.move(copy_from, copy_to)
@@ -154,4 +182,7 @@ class View(QMainWindow):
                          QMessageBox.StandardButton.Ok)
 
     def reject(self):
+        self.data.reset()
+        for file in os.listdir(TMP):
+            os.remove(os.path.abspath(os.path.join(TMP, file)))
         return super().close()
